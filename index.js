@@ -22,27 +22,47 @@ function findKey(obj, keyToFind) {
   return null;
 }
 
-// 🕵️ Smart Subject Extractor
+// 🕵️ UPGRADED: Smart Subject Extractor (Now catches BOTH Theory and Practical)
 function extractSubjects(data) {
     let subjects = [];
+    
     function search(obj) {
         if (Array.isArray(obj)) {
             if (obj.length > 0 && typeof obj[0] === 'object') {
                 let keys = JSON.stringify(obj[0]).toLowerCase();
+                // If it looks like a marks array, grab it, BUT keep searching!
                 if (keys.includes('ese') || keys.includes('grade') || keys.includes('credit') || keys.includes('sub')) {
-                    subjects = obj;
-                    return true;
+                    subjects.push(...obj);
+                } else {
+                    obj.forEach(search);
                 }
+            } else {
+                obj.forEach(search);
             }
         } else if (obj !== null && typeof obj === 'object') {
             for (let k in obj) {
-                if (search(obj[k])) return true;
+                search(obj[k]);
             }
         }
-        return false;
     }
+    
+    // Start the deep search
     search(data);
-    return subjects;
+    
+    // Filter duplicates just in case BEU API sends overlapping data
+    let uniqueSubjects = [];
+    let seenCodes = new Set();
+    for (let sub of subjects) {
+        let code = (findKey(sub, 'subject_code') || findKey(sub, 'sub_code') || findKey(sub, 'code') || '').toString().trim();
+        if (code && !seenCodes.has(code)) {
+            seenCodes.add(code);
+            uniqueSubjects.push(sub);
+        } else if (!code) {
+            uniqueSubjects.push(sub);
+        }
+    }
+    
+    return uniqueSubjects;
 }
 
 app.get('/api/result/:regNo', async (req, res) => {
@@ -71,21 +91,25 @@ app.get('/api/result/:regNo', async (req, res) => {
         const course = findKey(beuData, 'courseName') || findKey(beuData, 'course_name') || findKey(beuData, 'branch') || "B.Tech";
         const college = findKey(beuData, 'collegeName') || findKey(beuData, 'college_name') || findKey(beuData, 'college') || "B. P. MANDAL COLLEGE OF ENGINEERING";
         
-        const sgpa = findKey(beuData, 'sgpa') || findKey(beuData, 'cur_sgpa') || "0.0";
-        const cgpa = findKey(beuData, 'cgpa') || findKey(beuData, 'cur_cgpa') || "0.0";
+        let sgpa = findKey(beuData, 'sgpa') || findKey(beuData, 'cur_sgpa') || "0.0";
+        let cgpa = findKey(beuData, 'cgpa') || findKey(beuData, 'cur_cgpa') || "0.0";
         const status = findKey(beuData, 'result') || findKey(beuData, 'remarks') || "PASS";
 
-        // 2. Extract Subjects
+        // 🧹 AUTO-CLEANER: Removes hidden commas, letters, and spaces from SGPA
+        sgpa = sgpa.toString().replace(/[^0-9.]/g, '');
+        cgpa = cgpa.toString().replace(/[^0-9.]/g, '');
+
+        // 2. Extract Subjects (Now grabs Theory AND Practical)
         const rawSubjects = extractSubjects(beuData);
         const formattedSubjects = rawSubjects.map(sub => {
             return [
-                (findKey(sub, 'subject_code') || findKey(sub, 'sub_code') || findKey(sub, 'code') || '-').toString(),
-                (findKey(sub, 'subject_name') || findKey(sub, 'sub_name') || findKey(sub, 'name') || '-').toString(),
-                (findKey(sub, 'ese') || findKey(sub, 'theory_ese') || '-').toString(),
-                (findKey(sub, 'ia') || findKey(sub, 'mid_sem') || '-').toString(),
-                (findKey(sub, 'total') || findKey(sub, 'tot') || '-').toString(),
-                (findKey(sub, 'grade') || findKey(sub, 'gr') || '-').toString(),
-                (findKey(sub, 'credit') || findKey(sub, 'cr') || '-').toString()
+                (findKey(sub, 'subject_code') || findKey(sub, 'sub_code') || findKey(sub, 'code') || '-').toString().trim(),
+                (findKey(sub, 'subject_name') || findKey(sub, 'sub_name') || findKey(sub, 'name') || '-').toString().trim(),
+                (findKey(sub, 'ese') || findKey(sub, 'theory_ese') || '-').toString().trim(),
+                (findKey(sub, 'ia') || findKey(sub, 'mid_sem') || '-').toString().trim(),
+                (findKey(sub, 'total') || findKey(sub, 'tot') || '-').toString().trim(),
+                (findKey(sub, 'grade') || findKey(sub, 'gr') || '-').toString().trim(),
+                (findKey(sub, 'credit') || findKey(sub, 'cr') || '-').toString().trim()
             ];
         });
 
@@ -93,15 +117,15 @@ app.get('/api/result/:regNo', async (req, res) => {
             success: true,
             data: {
                 regNo: regNo,
-                name: name.toString(),
-                fatherName: fatherName.toString(),
-                motherName: motherName.toString(),
-                course: course.toString(),
-                college: college.toString(),
-                sgpa: sgpa.toString(),
-                cgpa: cgpa.toString(),
+                name: name.toString().trim(),
+                fatherName: fatherName.toString().trim(),
+                motherName: motherName.toString().trim(),
+                course: course.toString().trim(),
+                college: college.toString().trim(),
+                sgpa: sgpa,
+                cgpa: cgpa,
                 status: status.toString().toUpperCase().includes('FAIL') ? 'FAIL' : 'PASS',
-                remarks: status.toString(),
+                remarks: status.toString().trim(),
                 subjects: formattedSubjects
             }
         });
