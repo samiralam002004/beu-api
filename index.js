@@ -5,18 +5,16 @@ const axios = require('axios');
 const app = express();
 app.use(cors());
 
-// 🧠 Ultra-Smart Case-Insensitive Search Function
+// 🧠 Smart Case-Insensitive Search Function
 function findKey(obj, keyToFind) {
   if (obj === null || typeof obj !== 'object') return null;
 
-  // 1. Check all keys at the current level, ignoring uppercase/lowercase
   for (let key in obj) {
     if (key.toLowerCase() === keyToFind.toLowerCase() && obj[key] !== null && obj[key] !== '') {
       return obj[key];
     }
   }
 
-  // 2. If not found, dig deeper into nested arrays/objects
   for (let key in obj) {
     if (typeof obj[key] === 'object') {
       let result = findKey(obj[key], keyToFind);
@@ -30,16 +28,25 @@ app.get('/api/result/:regNo', async (req, res) => {
     const regNo = req.params.regNo;
     
     try {
-        const beuUrl = `https://beu-bih.ac.in/backend/v1/result/get-result?year=2024&rcdg_no=${regNo}&semester=I&exam_held=May%2F2025`;
+        // ✨ THE PERFECTED API CALL ✨
+        // Using axios.get with 'params' ensures the URL is formatted 100% perfectly every time.
+        const response = await axios.get('https://beu-bih.ac.in/backend/v1/result/get-result', {
+            params: {
+                year: '2024',
+                redg_no: regNo,       // <-- FIXED: redg_no instead of rcdg_no!
+                semester: 'I',
+                exam_held: 'May/2025'
+            }
+        });
 
-        const response = await axios.get(beuUrl);
         const beuData = response.data;
 
+        // If data is empty or says "No Record Found"
         if (!beuData || beuData.length === 0) {
             return res.status(404).json({ success: false, message: "Result not found" });
         }
 
-        // 🎯 Hunt for the data using multiple possible names, completely ignoring case!
+        // Extract the exact data you want to send to your Flutter App
         const name = findKey(beuData, 'studentName') || findKey(beuData, 'student_name') || findKey(beuData, 'name') || "Student";
         const sgpa = findKey(beuData, 'sgpa') || findKey(beuData, 'cur_sgpa') || findKey(beuData, 'current_sgpa') || "0.0";
         const cgpa = findKey(beuData, 'cgpa') || findKey(beuData, 'cur_cgpa') || "0.0";
@@ -49,11 +56,11 @@ app.get('/api/result/:regNo', async (req, res) => {
             success: true,
             data: {
                 regNo: regNo,
-                name: name,
-                sgpa: sgpa,
-                cgpa: cgpa,
+                name: name.toString(),
+                sgpa: sgpa.toString(),
+                cgpa: cgpa.toString(),
                 status: status.toString().toUpperCase().includes('FAIL') ? 'FAIL' : 'PASS',
-                remarks: status
+                remarks: status.toString()
             }
         });
 
