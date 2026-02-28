@@ -5,7 +5,7 @@ const axios = require('axios');
 const app = express();
 app.use(cors());
 
-// 🧠 Smart Case-Insensitive Search Function (Finds SGPA, Name, etc.)
+// 🧠 Smart Case-Insensitive Search Function
 function findKey(obj, keyToFind) {
   if (obj === null || typeof obj !== 'object') return null;
   for (let key in obj) {
@@ -22,13 +22,11 @@ function findKey(obj, keyToFind) {
   return null;
 }
 
-// 🕵️ NEW: Smart Subject Extractor
-// This hunts down the hidden array containing the student's individual subject marks
+// 🕵️ Smart Subject Extractor
 function extractSubjects(data) {
     let subjects = [];
     function search(obj) {
         if (Array.isArray(obj)) {
-            // Check if this array looks like a list of subjects/marks
             if (obj.length > 0 && typeof obj[0] === 'object') {
                 let keys = JSON.stringify(obj[0]).toLowerCase();
                 if (keys.includes('ese') || keys.includes('grade') || keys.includes('credit') || keys.includes('sub')) {
@@ -66,14 +64,18 @@ app.get('/api/result/:regNo', async (req, res) => {
             return res.status(404).json({ success: false, message: "Result not found" });
         }
 
-        // 1. Extract Basic Info
-        const name = findKey(beuData, 'studentName') || findKey(beuData, 'student_name') || findKey(beuData, 'name') || "Student";
-        const sgpa = findKey(beuData, 'sgpa') || findKey(beuData, 'cur_sgpa') || findKey(beuData, 'current_sgpa') || "0.0";
-        const cgpa = findKey(beuData, 'cgpa') || findKey(beuData, 'cur_cgpa') || "0.0";
-        const status = findKey(beuData, 'result') || findKey(beuData, 'remarks') || findKey(beuData, 'status') || "PASS";
+        // 1. ✨ EXTRACT ALL ORIGINAL MARKSHEET INFO ✨
+        const name = findKey(beuData, 'studentName') || findKey(beuData, 'student_name') || findKey(beuData, 'name') || "N/A";
+        const fatherName = findKey(beuData, 'fatherName') || findKey(beuData, 'father_name') || "N/A";
+        const motherName = findKey(beuData, 'motherName') || findKey(beuData, 'mother_name') || "N/A";
+        const course = findKey(beuData, 'courseName') || findKey(beuData, 'course_name') || findKey(beuData, 'branch') || "B.Tech";
         const college = findKey(beuData, 'collegeName') || findKey(beuData, 'college_name') || findKey(beuData, 'college') || "B. P. MANDAL COLLEGE OF ENGINEERING";
+        
+        const sgpa = findKey(beuData, 'sgpa') || findKey(beuData, 'cur_sgpa') || "0.0";
+        const cgpa = findKey(beuData, 'cgpa') || findKey(beuData, 'cur_cgpa') || "0.0";
+        const status = findKey(beuData, 'result') || findKey(beuData, 'remarks') || "PASS";
 
-        // 2. Extract and Format Individual Subject Marks
+        // 2. Extract Subjects
         const rawSubjects = extractSubjects(beuData);
         const formattedSubjects = rawSubjects.map(sub => {
             return [
@@ -82,23 +84,25 @@ app.get('/api/result/:regNo', async (req, res) => {
                 (findKey(sub, 'ese') || findKey(sub, 'theory_ese') || '-').toString(),
                 (findKey(sub, 'ia') || findKey(sub, 'mid_sem') || '-').toString(),
                 (findKey(sub, 'total') || findKey(sub, 'tot') || '-').toString(),
-                (findKey(sub, 'credit') || findKey(sub, 'cr') || '-').toString(),
-                (findKey(sub, 'grade') || findKey(sub, 'gr') || '-').toString()
+                (findKey(sub, 'grade') || findKey(sub, 'gr') || '-').toString(),
+                (findKey(sub, 'credit') || findKey(sub, 'cr') || '-').toString()
             ];
         });
 
-        // 3. Send everything safely to the Flutter App
         res.json({
             success: true,
             data: {
                 regNo: regNo,
                 name: name.toString(),
+                fatherName: fatherName.toString(),
+                motherName: motherName.toString(),
+                course: course.toString(),
+                college: college.toString(),
                 sgpa: sgpa.toString(),
                 cgpa: cgpa.toString(),
                 status: status.toString().toUpperCase().includes('FAIL') ? 'FAIL' : 'PASS',
                 remarks: status.toString(),
-                college: college.toString(),
-                subjects: formattedSubjects // ✨ THIS IS THE NEW DATA!
+                subjects: formattedSubjects
             }
         });
 
