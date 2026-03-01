@@ -5,7 +5,6 @@ const axios = require('axios');
 const app = express();
 app.use(cors());
 
-// 🧠 Smart Case-Insensitive Search Function
 function findKey(obj, keyToFind) {
   if (obj === null || typeof obj !== 'object') return null;
   for (let key in obj) {
@@ -22,15 +21,12 @@ function findKey(obj, keyToFind) {
   return null;
 }
 
-// 🕵️ UPGRADED: Smart Subject Extractor (Now catches BOTH Theory and Practical)
 function extractSubjects(data) {
     let subjects = [];
-    
     function search(obj) {
         if (Array.isArray(obj)) {
             if (obj.length > 0 && typeof obj[0] === 'object') {
                 let keys = JSON.stringify(obj[0]).toLowerCase();
-                // If it looks like a marks array, grab it, BUT keep searching!
                 if (keys.includes('ese') || keys.includes('grade') || keys.includes('credit') || keys.includes('sub')) {
                     subjects.push(...obj);
                 } else {
@@ -45,11 +41,7 @@ function extractSubjects(data) {
             }
         }
     }
-    
-    // Start the deep search
     search(data);
-    
-    // Filter duplicates just in case BEU API sends overlapping data
     let uniqueSubjects = [];
     let seenCodes = new Set();
     for (let sub of subjects) {
@@ -61,14 +53,30 @@ function extractSubjects(data) {
             uniqueSubjects.push(sub);
         }
     }
-    
     return uniqueSubjects;
+}
+
+// ✨ SMART EXTRACTOR: Grabs ONLY the last valid number in the list!
+function getLatestScore(arr) {
+    if (Array.isArray(arr)) {
+        for (let i = arr.length - 1; i >= 0; i--) {
+            if (arr[i] !== null && arr[i].toString().trim() !== '') {
+                return arr[i].toString().replace(/[^0-9.]/g, '');
+            }
+        }
+    } else if (typeof arr === 'string') {
+        let parts = arr.split(',');
+        for (let i = parts.length - 1; i >= 0; i--) {
+            if (parts[i] !== null && parts[i].trim() !== '') {
+                return parts[i].replace(/[^0-9.]/g, '');
+            }
+        }
+    }
+    return arr ? arr.toString().replace(/[^0-9.]/g, '') : "0.00";
 }
 
 app.get('/api/result/:regNo', async (req, res) => {
     const regNo = req.params.regNo;
-    
-    // ✨ NEW: Catch dynamic semester data sent from the Flutter app!
     const semester = req.query.semester || 'I';
     const exam_held = req.query.exam_held || 'May/2025';
     const year = req.query.year || '2024';
@@ -89,22 +97,21 @@ app.get('/api/result/:regNo', async (req, res) => {
             return res.status(404).json({ success: false, message: "Result not found" });
         }
 
-        // 1. ✨ EXTRACT ALL ORIGINAL MARKSHEET INFO ✨
         const name = findKey(beuData, 'studentName') || findKey(beuData, 'student_name') || findKey(beuData, 'name') || "N/A";
         const fatherName = findKey(beuData, 'fatherName') || findKey(beuData, 'father_name') || "N/A";
         const motherName = findKey(beuData, 'motherName') || findKey(beuData, 'mother_name') || "N/A";
         const course = findKey(beuData, 'courseName') || findKey(beuData, 'course_name') || findKey(beuData, 'branch') || "B.Tech";
         const college = findKey(beuData, 'collegeName') || findKey(beuData, 'college_name') || findKey(beuData, 'college') || "B. P. MANDAL COLLEGE OF ENGINEERING";
         
-        let sgpa = findKey(beuData, 'sgpa') || findKey(beuData, 'cur_sgpa') || "0.0";
-        let cgpa = findKey(beuData, 'cgpa') || findKey(beuData, 'cur_cgpa') || "0.0";
+        // ✨ Passes raw data to the smart extractor
+        const sgpaRaw = findKey(beuData, 'sgpa') || findKey(beuData, 'cur_sgpa') || "0.0";
+        const cgpaRaw = findKey(beuData, 'cgpa') || findKey(beuData, 'cur_cgpa') || "0.0";
+        
+        const sgpa = getLatestScore(sgpaRaw);
+        const cgpa = getLatestScore(cgpaRaw);
+
         const status = findKey(beuData, 'result') || findKey(beuData, 'remarks') || "PASS";
 
-        // 🧹 AUTO-CLEANER: Removes hidden commas, letters, and spaces from SGPA
-        sgpa = sgpa.toString().replace(/[^0-9.]/g, '');
-        cgpa = cgpa.toString().replace(/[^0-9.]/g, '');
-
-        // 2. Extract Subjects (Now grabs Theory AND Practical)
         const rawSubjects = extractSubjects(beuData);
         const formattedSubjects = rawSubjects.map(sub => {
             return [
