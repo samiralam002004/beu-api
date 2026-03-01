@@ -68,13 +68,18 @@ function extractSubjects(data) {
 app.get('/api/result/:regNo', async (req, res) => {
     const regNo = req.params.regNo;
     
+    // ✨ NEW: Catch dynamic semester data sent from the Flutter app!
+    const semester = req.query.semester || 'I';
+    const exam_held = req.query.exam_held || 'May/2025';
+    const year = req.query.year || '2024';
+    
     try {
         const response = await axios.get('https://beu-bih.ac.in/backend/v1/result/get-result', {
             params: {
-                year: '2024',
+                year: year,
                 redg_no: regNo,
-                semester: 'I',
-                exam_held: 'May/2025'
+                semester: semester,
+                exam_held: exam_held
             }
         });
 
