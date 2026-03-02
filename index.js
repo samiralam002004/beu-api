@@ -56,23 +56,40 @@ function extractSubjects(data) {
     return uniqueSubjects;
 }
 
-// ✨ SMART EXTRACTOR: Grabs ONLY the last valid number in the list!
-function getLatestScore(arr) {
+// ✨ SMART EXTRACTOR: Gets BOTH the Latest Score (for UI) AND the Full History (for PDF)
+function processHistory(arr) {
+    let history = ["-", "-", "-", "-", "-", "-", "-", "-"];
+    let latest = "0.00";
+    
     if (Array.isArray(arr)) {
-        for (let i = arr.length - 1; i >= 0; i--) {
+        for (let i = 0; i < arr.length && i < 8; i++) {
             if (arr[i] !== null && arr[i].toString().trim() !== '') {
-                return arr[i].toString().replace(/[^0-9.]/g, '');
+                let cleaned = arr[i].toString().replace(/[^0-9.]/g, '');
+                if(cleaned) {
+                    history[i] = cleaned;
+                    latest = cleaned; 
+                }
             }
         }
     } else if (typeof arr === 'string') {
         let parts = arr.split(',');
-        for (let i = parts.length - 1; i >= 0; i--) {
+        for (let i = 0; i < parts.length && i < 8; i++) {
             if (parts[i] !== null && parts[i].trim() !== '') {
-                return parts[i].replace(/[^0-9.]/g, '');
+                let cleaned = parts[i].replace(/[^0-9.]/g, '');
+                if(cleaned) {
+                    history[i] = cleaned;
+                    latest = cleaned;
+                }
             }
         }
+    } else if (arr !== null && arr !== undefined) {
+         let cleaned = arr.toString().replace(/[^0-9.]/g, '');
+         if(cleaned) {
+             history[0] = cleaned;
+             latest = cleaned;
+         }
     }
-    return arr ? arr.toString().replace(/[^0-9.]/g, '') : "0.00";
+    return { history, latest };
 }
 
 app.get('/api/result/:regNo', async (req, res) => {
@@ -103,12 +120,9 @@ app.get('/api/result/:regNo', async (req, res) => {
         const course = findKey(beuData, 'courseName') || findKey(beuData, 'course_name') || findKey(beuData, 'branch') || "B.Tech";
         const college = findKey(beuData, 'collegeName') || findKey(beuData, 'college_name') || findKey(beuData, 'college') || "B. P. MANDAL COLLEGE OF ENGINEERING";
         
-        // ✨ Passes raw data to the smart extractor
-        const sgpaRaw = findKey(beuData, 'sgpa') || findKey(beuData, 'cur_sgpa') || "0.0";
-        const cgpaRaw = findKey(beuData, 'cgpa') || findKey(beuData, 'cur_cgpa') || "0.0";
-        
-        const sgpa = getLatestScore(sgpaRaw);
-        const cgpa = getLatestScore(cgpaRaw);
+        // ✨ Uses the Smart Extractor to split UI score from PDF History
+        const sgpaData = processHistory(findKey(beuData, 'sgpa') || findKey(beuData, 'cur_sgpa'));
+        const cgpaData = processHistory(findKey(beuData, 'cgpa') || findKey(beuData, 'cur_cgpa'));
 
         const status = findKey(beuData, 'result') || findKey(beuData, 'remarks') || "PASS";
 
@@ -134,8 +148,9 @@ app.get('/api/result/:regNo', async (req, res) => {
                 motherName: motherName.toString().trim(),
                 course: course.toString().trim(),
                 college: college.toString().trim(),
-                sgpa: sgpa,
-                cgpa: cgpa,
+                sgpa: sgpaData.latest, // This keeps the Flutter UI clean
+                cgpa: cgpaData.latest, // This keeps the Flutter UI clean
+                sgpaHistory: sgpaData.history, // ✨ This sends all semesters to the PDF generator!
                 status: status.toString().toUpperCase().includes('FAIL') ? 'FAIL' : 'PASS',
                 remarks: status.toString().trim(),
                 subjects: formattedSubjects
